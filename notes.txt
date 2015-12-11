@@ -1,0 +1,8 @@
+## requirements
+
+go get -u github.com/golang/protobuf/{proto,protoc-gen-go}
+go get google.golang.org/grpc
+
+## notes
+
+* probably won't work until https://github.com/grpc/grpc-go/issues/75 get solved.

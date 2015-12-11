@@ -102,7 +102,6 @@ func (p *Peer) startHeartbeat() {
 // Stops the peer heartbeat.
 func (p *Peer) stopHeartbeat(flush bool) {
 	p.setLastActivity(time.Time{})
-
 	p.stopChan <- flush
 }
 
@@ -203,11 +202,11 @@ func (p *Peer) sendAppendEntriesRequest(req *AppendEntriesRequest) {
 	p.Lock()
 	if resp.Success() {
 		if len(req.Entries) > 0 {
-			p.prevLogIndex = req.Entries[len(req.Entries)-1].GetIndex()
+			p.prevLogIndex = req.Entries[len(req.Entries)-1].Index
 
 			// if peer append a log entry from the current term
 			// we set append to true
-			if req.Entries[len(req.Entries)-1].GetTerm() == p.server.currentTerm {
+			if req.Entries[len(req.Entries)-1].Term == p.server.currentTerm {
 				resp.append = true
 			}
 		}

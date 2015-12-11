@@ -8,8 +8,8 @@ import (
 	"io/ioutil"
 	"os"
 
-	"code.google.com/p/gogoprotobuf/proto"
-	"github.com/goraft/raft/protobuf"
+	"github.com/golang/protobuf/proto"
+	protobuf "raft/proto"
 )
 
 // Snapshot represents an in-memory representation of the current state of the system.
@@ -112,15 +112,15 @@ func (req *SnapshotRecoveryRequest) Encode(w io.Writer) (int, error) {
 
 	for i, peer := range req.Peers {
 		protoPeers[i] = &protobuf.SnapshotRecoveryRequest_Peer{
-			Name:             proto.String(peer.Name),
-			ConnectionString: proto.String(peer.ConnectionString),
+			Name:             *proto.String(peer.Name),
+			ConnectionString: *proto.String(peer.ConnectionString),
 		}
 	}
 
 	pb := &protobuf.SnapshotRecoveryRequest{
-		LeaderName: proto.String(req.LeaderName),
-		LastIndex:  proto.Uint64(req.LastIndex),
-		LastTerm:   proto.Uint64(req.LastTerm),
+		LeaderName: *proto.String(req.LeaderName),
+		LastIndex:  *proto.Uint64(req.LastIndex),
+		LastTerm:   *proto.Uint64(req.LastTerm),
 		Peers:      protoPeers,
 		State:      req.State,
 	}
@@ -148,17 +148,17 @@ func (req *SnapshotRecoveryRequest) Decode(r io.Reader) (int, error) {
 		return -1, err
 	}
 
-	req.LeaderName = pb.GetLeaderName()
-	req.LastIndex = pb.GetLastIndex()
-	req.LastTerm = pb.GetLastTerm()
-	req.State = pb.GetState()
+	req.LeaderName = pb.LeaderName
+	req.LastIndex = pb.LastIndex
+	req.LastTerm = pb.LastTerm
+	req.State = pb.State
 
 	req.Peers = make([]*Peer, len(pb.Peers))
 
 	for i, peer := range pb.Peers {
 		req.Peers[i] = &Peer{
-			Name:             peer.GetName(),
-			ConnectionString: peer.GetConnectionString(),
+			Name:             peer.Name,
+			ConnectionString: peer.ConnectionString,
 		}
 	}
 
@@ -178,9 +178,9 @@ func newSnapshotRecoveryResponse(term uint64, success bool, commitIndex uint64) 
 // Returns the number of bytes written and any error that occurs.
 func (req *SnapshotRecoveryResponse) Encode(w io.Writer) (int, error) {
 	pb := &protobuf.SnapshotRecoveryResponse{
-		Term:        proto.Uint64(req.Term),
-		Success:     proto.Bool(req.Success),
-		CommitIndex: proto.Uint64(req.CommitIndex),
+		Term:        *proto.Uint64(req.Term),
+		Success:     *proto.Bool(req.Success),
+		CommitIndex: *proto.Uint64(req.CommitIndex),
 	}
 	p, err := proto.Marshal(pb)
 	if err != nil {
@@ -205,9 +205,9 @@ func (req *SnapshotRecoveryResponse) Decode(r io.Reader) (int, error) {
 		return -1, err
 	}
 
-	req.Term = pb.GetTerm()
-	req.Success = pb.GetSuccess()
-	req.CommitIndex = pb.GetCommitIndex()
+	req.Term = pb.Term
+	req.Success = pb.Success
+	req.CommitIndex = pb.CommitIndex
 
 	return totalBytes, nil
 }
@@ -221,46 +221,6 @@ func newSnapshotRequest(leaderName string, snapshot *Snapshot) *SnapshotRequest 
 	}
 }
 
-// Encodes the SnapshotRequest to a buffer. Returns the number of bytes
-// written and any error that may have occurred.
-func (req *SnapshotRequest) Encode(w io.Writer) (int, error) {
-	pb := &protobuf.SnapshotRequest{
-		LeaderName: proto.String(req.LeaderName),
-		LastIndex:  proto.Uint64(req.LastIndex),
-		LastTerm:   proto.Uint64(req.LastTerm),
-	}
-	p, err := proto.Marshal(pb)
-	if err != nil {
-		return -1, err
-	}
-
-	return w.Write(p)
-}
-
-// Decodes the SnapshotRequest from a buffer. Returns the number of bytes read and
-// any error that occurs.
-func (req *SnapshotRequest) Decode(r io.Reader) (int, error) {
-	data, err := ioutil.ReadAll(r)
-
-	if err != nil {
-		return 0, err
-	}
-
-	totalBytes := len(data)
-
-	pb := &protobuf.SnapshotRequest{}
-
-	if err := proto.Unmarshal(data, pb); err != nil {
-		return -1, err
-	}
-
-	req.LeaderName = pb.GetLeaderName()
-	req.LastIndex = pb.GetLastIndex()
-	req.LastTerm = pb.GetLastTerm()
-
-	return totalBytes, nil
-}
-
 // Creates a new Snapshot response.
 func newSnapshotResponse(success bool) *SnapshotResponse {
 	return &SnapshotResponse{
@@ -272,7 +232,7 @@ func newSnapshotResponse(success bool) *SnapshotResponse {
 // written and any error that may have occurred.
 func (resp *SnapshotResponse) Encode(w io.Writer) (int, error) {
 	pb := &protobuf.SnapshotResponse{
-		Success: proto.Bool(resp.Success),
+		Success: *proto.Bool(resp.Success),
 	}
 	p, err := proto.Marshal(pb)
 	if err != nil {
@@ -298,7 +258,7 @@ func (resp *SnapshotResponse) Decode(r io.Reader) (int, error) {
 		return -1, err
 	}
 
-	resp.Success = pb.GetSuccess()
+	resp.Success = pb.Success
 
 	return totalBytes, nil
 }

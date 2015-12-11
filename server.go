@@ -6,11 +6,18 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io/ioutil"
+	"net"
 	"os"
 	"path"
 	"sort"
+	"strings"
 	"sync"
 	"time"
+
+	_ "github.com/golang/protobuf/proto"
+	nc "golang.org/x/net/context"
+	"google.golang.org/grpc"
+	protobuf "raft/proto"
 )
 
 //------------------------------------------------------------------------------
@@ -89,10 +96,6 @@ type Server interface {
 	SetHeartbeatInterval(duration time.Duration)
 	Transporter() Transporter
 	SetTransporter(t Transporter)
-	AppendEntries(req *AppendEntriesRequest) *AppendEntriesResponse
-	RequestVote(req *RequestVoteRequest) *RequestVoteResponse
-	RequestSnapshot(req *SnapshotRequest) *SnapshotResponse
-	SnapshotRecoveryRequest(req *SnapshotRecoveryRequest) *SnapshotRecoveryResponse
 	AddPeer(name string, connectiongString string) error
 	RemovePeer(name string) error
 	Peers() map[string]*Peer
@@ -105,6 +108,7 @@ type Server interface {
 	LoadSnapshot() error
 	AddEventListener(string, EventListener)
 	FlushCommitIndex()
+	protobuf.RaftServer
 }
 
 type server struct {
@@ -470,6 +474,19 @@ func (s *server) Start() error {
 		s.loop()
 	}()
 
+	var port string
+	if s.connectionString == "" {
+		port = ":4001"
+	} else {
+		port = strings.Split(s.connectionString, ":")[1]
+	}
+	debugln("listen on: ", port)
+	lis, _ := net.Listen("tcp", port)
+	rs := grpc.NewServer()
+	go func() {
+		protobuf.RegisterRaftServer(rs, s)
+		rs.Serve(lis)
+	}()
 	return nil
 }
 
@@ -927,12 +944,17 @@ func (s *server) processCommand(command Command, e *ev) {
 //--------------------------------------
 // Append Entries
 //--------------------------------------
-
 // Appends zero or more log entry from the leader to this server.
-func (s *server) AppendEntries(req *AppendEntriesRequest) *AppendEntriesResponse {
+func (s *server) AppendEntries(c nc.Context, req *protobuf.AppendEntriesRequest) (*protobuf.AppendEntriesResponse, error) {
 	ret, _ := s.send(req)
 	resp, _ := ret.(*AppendEntriesResponse)
-	return resp
+	return resp.pb, nil
+	// return &protobuf.AppendEntriesResponse{
+	// 	Term:        proto.Uint64(resp.Term),
+	// 	Index:       proto.Uint64(resp.Index),
+	// 	CommitIndex: proto.Uint64(resp.CommitIndex),
+	// 	Success:     proto.Uint64(resp.Success),
+	// }, nil
 }
 
 // Processes the "append entries" request.
@@ -1056,10 +1078,15 @@ func (s *server) processVoteResponse(resp *RequestVoteResponse) bool {
 // Requests a vote from a server. A vote can be obtained if the vote's term is
 // at the server's current term and the server has not made a vote yet. A vote
 // can also be obtained if the term is greater than the server's current term.
-func (s *server) RequestVote(req *RequestVoteRequest) *RequestVoteResponse {
+func (s *server) RequestVote(c nc.Context, req *protobuf.RequestVoteRequest) (*protobuf.RequestVoteResponse, error) {
 	ret, _ := s.send(req)
 	resp, _ := ret.(*RequestVoteResponse)
-	return resp
+
+	return &protobuf.RequestVoteResponse{
+		// Term:        proto.Uint64(resp.Term),
+		Term:        resp.Term,
+		VoteGranted: resp.VoteGranted,
+	}, nil
 }
 
 // Processes a "request vote" request.
@@ -1258,10 +1285,12 @@ func (s *server) SnapshotPath(lastIndex uint64, lastTerm uint64) string {
 	return path.Join(s.path, "snapshot", fmt.Sprintf("%v_%v.ss", lastTerm, lastIndex))
 }
 
-func (s *server) RequestSnapshot(req *SnapshotRequest) *SnapshotResponse {
+func (s *server) RequestSnapshot(c nc.Context, req *protobuf.SnapshotRequest) (*protobuf.SnapshotResponse, error) {
 	ret, _ := s.send(req)
 	resp, _ := ret.(*SnapshotResponse)
-	return resp
+	return &protobuf.SnapshotResponse{
+		Success: resp.Success,
+	}, nil
 }
 
 func (s *server) processSnapshotRequest(req *SnapshotRequest) *SnapshotResponse {
@@ -1280,10 +1309,14 @@ func (s *server) processSnapshotRequest(req *SnapshotRequest) *SnapshotResponse 
 	return newSnapshotResponse(true)
 }
 
-func (s *server) SnapshotRecoveryRequest(req *SnapshotRecoveryRequest) *SnapshotRecoveryResponse {
+func (s *server) RequestSnapshotRecovery(c nc.Context, req *protobuf.SnapshotRecoveryRequest) (*protobuf.SnapshotRecoveryResponse, error) {
 	ret, _ := s.send(req)
 	resp, _ := ret.(*SnapshotRecoveryResponse)
-	return resp
+	return &protobuf.SnapshotRecoveryResponse{
+		Term:        resp.Term,
+		Success:     resp.Success,
+		CommitIndex: resp.CommitIndex,
+	}, nil
 }
 
 func (s *server) processSnapshotRecoveryRequest(req *SnapshotRecoveryRequest) *SnapshotRecoveryResponse {

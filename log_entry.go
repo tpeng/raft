@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	"code.google.com/p/gogoprotobuf/proto"
-	"github.com/goraft/raft/protobuf"
+	"github.com/golang/protobuf/proto"
+	protobuf "raft/proto"
 )
 
 // A log entry stores a single item in the log.
@@ -36,9 +36,9 @@ func newLogEntry(log *Log, event *ev, index uint64, term uint64, command Command
 	}
 
 	pb := &protobuf.LogEntry{
-		Index:       proto.Uint64(index),
-		Term:        proto.Uint64(term),
-		CommandName: proto.String(commandName),
+		Index:       *proto.Uint64(index),
+		Term:        *proto.Uint64(term),
+		CommandName: *proto.String(commandName),
 		Command:     buf.Bytes(),
 	}
 
@@ -52,19 +52,19 @@ func newLogEntry(log *Log, event *ev, index uint64, term uint64, command Command
 }
 
 func (e *LogEntry) Index() uint64 {
-	return e.pb.GetIndex()
+	return e.pb.Index
 }
 
 func (e *LogEntry) Term() uint64 {
-	return e.pb.GetTerm()
+	return e.pb.Term
 }
 
 func (e *LogEntry) CommandName() string {
-	return e.pb.GetCommandName()
+	return e.pb.CommandName
 }
 
 func (e *LogEntry) Command() []byte {
-	return e.pb.GetCommand()
+	return e.pb.Command
 }
 
 // Encodes the log entry to a buffer. Returns the number of bytes
