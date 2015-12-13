@@ -1278,7 +1278,7 @@ func (s *server) SnapshotPath(lastIndex uint64, lastTerm uint64) string {
 	return path.Join(s.path, "snapshot", fmt.Sprintf("%v_%v.ss", lastTerm, lastIndex))
 }
 
-func (s *server) RequestSnapshot(c nc.Context, req *protobuf.SnapshotRequest) (*protobuf.SnapshotResponse, error) {
+func (s *server) Snapshot(c nc.Context, req *protobuf.SnapshotRequest) (*protobuf.SnapshotResponse, error) {
 	ret, _ := s.send(req)
 	resp, _ := ret.(*SnapshotResponse)
 	return &protobuf.SnapshotResponse{
@@ -1302,7 +1302,7 @@ func (s *server) processSnapshotRequest(req *SnapshotRequest) *SnapshotResponse 
 	return newSnapshotResponse(true)
 }
 
-func (s *server) RequestSnapshotRecovery(c nc.Context, req *protobuf.SnapshotRecoveryRequest) (*protobuf.SnapshotRecoveryResponse, error) {
+func (s *server) SnapshotRecovery(c nc.Context, req *protobuf.SnapshotRecoveryRequest) (*protobuf.SnapshotRecoveryResponse, error) {
 	ret, _ := s.send(req)
 	resp, _ := ret.(*SnapshotRecoveryResponse)
 	return &protobuf.SnapshotRecoveryResponse{

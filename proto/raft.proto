@@ -6,8 +6,8 @@ package proto;
 service Raft {
     rpc RequestVote (RequestVoteRequest) returns (RequestVoteResponse) {}
     rpc AppendEntries (AppendEntriesRequest) returns (AppendEntriesResponse) {}
-    rpc RequestSnapshot (SnapshotRequest) returns (SnapshotResponse) {}
-    rpc RequestSnapshotRecovery (SnapshotRecoveryRequest) returns (SnapshotRecoveryResponse) {}
+    rpc Snapshot (SnapshotRequest) returns (SnapshotResponse) {}
+    rpc SnapshotRecovery (SnapshotRecoveryRequest) returns (SnapshotRecoveryResponse) {}
 }
 
 // the request/response defintion for RequestVote

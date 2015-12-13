@@ -77,7 +77,7 @@ func (t *GRPCTransporter) SendSnapshotRequest(server Server, peer *Peer, req *Sn
 	}
 	defer conn.Close()
 	client := protobuf.NewRaftClient(conn)
-	resp, err := client.RequestSnapshot(nc.Background(), &protobuf.SnapshotRequest{
+	resp, err := client.Snapshot(nc.Background(), &protobuf.SnapshotRequest{
 		LeaderName: req.LeaderName,
 		LastIndex:  req.LastIndex,
 		LastTerm:   req.LastTerm,
@@ -116,7 +116,7 @@ func (t *GRPCTransporter) SendSnapshotRecoveryRequest(server Server, peer *Peer,
 		State:      req.State,
 	}
 
-	resp, err := client.RequestSnapshotRecovery(nc.Background(), pb)
+	resp, err := client.SnapshotRecovery(nc.Background(), pb)
 
 	if err != nil {
 		log.Println("error when call SnapshotRecovery", err)
