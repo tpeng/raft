@@ -10,7 +10,6 @@ import (
 	"os"
 	"path"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -116,6 +115,7 @@ type server struct {
 
 	name        string
 	path        string
+	port        int
 	state       string
 	transporter Transporter
 	context     interface{}
@@ -167,7 +167,7 @@ type ev struct {
 // compaction is to be disabled. context can be anything (including nil)
 // and is not used by the raft package except returned by
 // Server.Context(). connectionString can be anything.
-func NewServer(name string, path string, transporter Transporter, stateMachine StateMachine, ctx interface{}, connectionString string) (Server, error) {
+func NewServer(name string, path string, transporter Transporter, stateMachine StateMachine, ctx interface{}, connectionString string, port int) (Server, error) {
 	if name == "" {
 		return nil, errors.New("raft.Server: Name cannot be blank")
 	}
@@ -178,6 +178,7 @@ func NewServer(name string, path string, transporter Transporter, stateMachine S
 	s := &server{
 		name:                    name,
 		path:                    path,
+		port:                    port,
 		transporter:             transporter,
 		stateMachine:            stateMachine,
 		context:                 ctx,
@@ -474,16 +475,10 @@ func (s *server) Start() error {
 		s.loop()
 	}()
 
-	var port string
-	if s.connectionString == "" {
-		port = ":4001"
-	} else {
-		port = strings.Split(s.connectionString, ":")[1]
-	}
-	debugln("listen on: ", port)
-	lis, _ := net.Listen("tcp", port)
-	rs := grpc.NewServer()
 	go func() {
+		debugln("listen on:  %s", s.port)
+		lis, _ := net.Listen("tcp", fmt.Sprintf(":%v", s.port))
+		rs := grpc.NewServer()
 		protobuf.RegisterRaftServer(rs, s)
 		rs.Serve(lis)
 	}()
@@ -707,14 +702,14 @@ func (s *server) followerLoop() {
 				} else {
 					err = NotLeaderError
 				}
-			case *AppendEntriesRequest:
+			case *protobuf.AppendEntriesRequest:
 				// If heartbeats get too close to the election timeout then send an event.
 				elapsedTime := time.Now().Sub(since)
 				if elapsedTime > time.Duration(float64(electionTimeout)*ElectionTimeoutThresholdPercent) {
 					s.DispatchEvent(newEvent(ElectionTimeoutThresholdEventType, elapsedTime, nil))
 				}
 				e.returnValue, update = s.processAppendEntriesRequest(req)
-			case *RequestVoteRequest:
+			case *protobuf.RequestVoteRequest:
 				e.returnValue, update = s.processRequestVoteRequest(req)
 			case *SnapshotRequest:
 				e.returnValue = s.processSnapshotRequest(req)
@@ -745,6 +740,7 @@ func (s *server) followerLoop() {
 
 // The event loop that is run when the server is in a Candidate state.
 func (s *server) candidateLoop() {
+	// s.debugln("candidateLoop")
 	// Clear leader value.
 	prevLeader := s.leader
 	s.leader = ""
@@ -809,9 +805,9 @@ func (s *server) candidateLoop() {
 			switch req := e.target.(type) {
 			case Command:
 				err = NotLeaderError
-			case *AppendEntriesRequest:
+			case *protobuf.AppendEntriesRequest:
 				e.returnValue, _ = s.processAppendEntriesRequest(req)
-			case *RequestVoteRequest:
+			case *protobuf.RequestVoteRequest:
 				e.returnValue, _ = s.processRequestVoteRequest(req)
 			}
 
@@ -828,6 +824,7 @@ func (s *server) candidateLoop() {
 func (s *server) leaderLoop() {
 	logIndex, _ := s.log.lastInfo()
 
+	fmt.Println("leaderloop")
 	// Update the peers prevLogIndex to leader's lastLogIndex and start heartbeat.
 	s.debugln("leaderLoop.set.PrevIndex to ", logIndex)
 	for _, peer := range s.peers {
@@ -862,11 +859,11 @@ func (s *server) leaderLoop() {
 			case Command:
 				s.processCommand(req, e)
 				continue
-			case *AppendEntriesRequest:
+			case *protobuf.AppendEntriesRequest:
 				e.returnValue, _ = s.processAppendEntriesRequest(req)
 			case *AppendEntriesResponse:
 				s.processAppendEntriesResponse(req)
-			case *RequestVoteRequest:
+			case *protobuf.RequestVoteRequest:
 				e.returnValue, _ = s.processRequestVoteRequest(req)
 			}
 
@@ -890,11 +887,11 @@ func (s *server) snapshotLoop() {
 			switch req := e.target.(type) {
 			case Command:
 				err = NotLeaderError
-			case *AppendEntriesRequest:
+			case *protobuf.AppendEntriesRequest:
 				e.returnValue, _ = s.processAppendEntriesRequest(req)
-			case *RequestVoteRequest:
+			case *protobuf.RequestVoteRequest:
 				e.returnValue, _ = s.processRequestVoteRequest(req)
-			case *SnapshotRecoveryRequest:
+			case *protobuf.SnapshotRecoveryRequest:
 				e.returnValue = s.processSnapshotRecoveryRequest(req)
 			}
 			// Callback to event.
@@ -946,20 +943,15 @@ func (s *server) processCommand(command Command, e *ev) {
 //--------------------------------------
 // Appends zero or more log entry from the leader to this server.
 func (s *server) AppendEntries(c nc.Context, req *protobuf.AppendEntriesRequest) (*protobuf.AppendEntriesResponse, error) {
+
 	ret, _ := s.send(req)
 	resp, _ := ret.(*AppendEntriesResponse)
 	return resp.pb, nil
-	// return &protobuf.AppendEntriesResponse{
-	// 	Term:        proto.Uint64(resp.Term),
-	// 	Index:       proto.Uint64(resp.Index),
-	// 	CommitIndex: proto.Uint64(resp.CommitIndex),
-	// 	Success:     proto.Uint64(resp.Success),
-	// }, nil
 }
 
 // Processes the "append entries" request.
-func (s *server) processAppendEntriesRequest(req *AppendEntriesRequest) (*AppendEntriesResponse, bool) {
-	s.traceln("server.ae.process")
+func (s *server) processAppendEntriesRequest(req *protobuf.AppendEntriesRequest) (*AppendEntriesResponse, bool) {
+	// s.traceln("processAppendEntriesRequest")
 
 	if req.Term < s.currentTerm {
 		s.debugln("server.ae.error: stale term")
@@ -1010,6 +1002,7 @@ func (s *server) processAppendEntriesRequest(req *AppendEntriesRequest) (*Append
 // processed when the server is a leader. Responses received during other
 // states are dropped.
 func (s *server) processAppendEntriesResponse(resp *AppendEntriesResponse) {
+
 	// If we find a higher term then change to a follower and exit.
 	if resp.Term() > s.Term() {
 		s.updateCurrentTerm(resp.Term(), "")
@@ -1083,15 +1076,15 @@ func (s *server) RequestVote(c nc.Context, req *protobuf.RequestVoteRequest) (*p
 	resp, _ := ret.(*RequestVoteResponse)
 
 	return &protobuf.RequestVoteResponse{
-		// Term:        proto.Uint64(resp.Term),
 		Term:        resp.Term,
 		VoteGranted: resp.VoteGranted,
 	}, nil
 }
 
 // Processes a "request vote" request.
-func (s *server) processRequestVoteRequest(req *RequestVoteRequest) (*RequestVoteResponse, bool) {
+func (s *server) processRequestVoteRequest(req *protobuf.RequestVoteRequest) (*RequestVoteResponse, bool) {
 
+	// s.debugln("processRequestVoteRequest: ", req)
 	// If the request is coming from an old term then reject it.
 	if req.Term < s.Term() {
 		s.debugln("server.rv.deny.vote: cause stale term")
@@ -1319,30 +1312,32 @@ func (s *server) RequestSnapshotRecovery(c nc.Context, req *protobuf.SnapshotRec
 	}, nil
 }
 
-func (s *server) processSnapshotRecoveryRequest(req *SnapshotRecoveryRequest) *SnapshotRecoveryResponse {
-	// Recover state sent from request.
-	if err := s.stateMachine.Recovery(req.State); err != nil {
-		panic("cannot recover from previous state")
-	}
+func (s *server) processSnapshotRecoveryRequest(req1 *protobuf.SnapshotRecoveryRequest) *SnapshotRecoveryResponse {
 
-	// Recover the cluster configuration.
-	s.peers = make(map[string]*Peer)
-	for _, peer := range req.Peers {
-		s.AddPeer(peer.Name, peer.ConnectionString)
-	}
+	// req := newSnapshotRecoveryRequest(req1.LeaderName, req1.snapshot)
+	// // Recover state sent from request.
+	// if err := s.stateMachine.Recovery(req.State); err != nil {
+	// 	panic("cannot recover from previous state")
+	// }
 
-	// Update log state.
-	s.currentTerm = req.LastTerm
-	s.log.updateCommitIndex(req.LastIndex)
+	// // Recover the cluster configuration.
+	// s.peers = make(map[string]*Peer)
+	// for _, peer := range req.Peers {
+	// 	s.AddPeer(peer.Name, peer.ConnectionString)
+	// }
 
-	// Create local snapshot.
-	s.pendingSnapshot = &Snapshot{req.LastIndex, req.LastTerm, req.Peers, req.State, s.SnapshotPath(req.LastIndex, req.LastTerm)}
-	s.saveSnapshot()
+	// // Update log state.
+	// s.currentTerm = req.LastTerm
+	// s.log.updateCommitIndex(req.LastIndex)
 
-	// Clear the previous log entries.
-	s.log.compact(req.LastIndex, req.LastTerm)
+	// // Create local snapshot.
+	// s.pendingSnapshot = &Snapshot{req.LastIndex, req.LastTerm, req.Peers, req.State, s.SnapshotPath(req.LastIndex, req.LastTerm)}
+	// s.saveSnapshot()
 
-	return newSnapshotRecoveryResponse(req.LastTerm, true, req.LastIndex)
+	// // Clear the previous log entries.
+	// s.log.compact(req.LastIndex, req.LastTerm)
+
+	return newSnapshotRecoveryResponse(req1.LastTerm, true, req1.LastIndex)
 }
 
 // Load a snapshot at restart

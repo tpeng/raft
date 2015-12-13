@@ -1,7 +1,6 @@
 package raft
 
 import (
-	"fmt"
 	"log"
 	"time"
 
@@ -23,9 +22,10 @@ func (t *GRPCTransporter) Install(server Server, mux interface{}) {
 }
 
 func (t *GRPCTransporter) SendAppendEntriesRequest(server Server, peer *Peer, req *AppendEntriesRequest) *AppendEntriesResponse {
-	conn, err := grpc.Dial(peer.ConnectionString)
+	conn, err := grpc.Dial(peer.ConnectionString, grpc.WithInsecure())
 	if err != nil {
 		log.Println("can't connect to", peer.ConnectionString)
+		log.Println(err)
 		return nil
 	}
 	defer conn.Close()
@@ -42,14 +42,16 @@ func (t *GRPCTransporter) SendAppendEntriesRequest(server Server, peer *Peer, re
 		log.Println("error when call AppendEntries", err)
 		return nil
 	}
-	fmt.Println("AppendEntries resp:", resp)
+	// fmt.Println("AppendEntries resp:", resp)
 	return newAppendEntriesResponse(resp.Term, resp.Success, resp.Index, resp.CommitIndex)
 }
 
 func (t *GRPCTransporter) SendVoteRequest(server Server, peer *Peer, req *RequestVoteRequest) *RequestVoteResponse {
-	conn, err := grpc.Dial(peer.ConnectionString)
+	// log.Println("SendVoteRequest to", peer.ConnectionString)
+	conn, err := grpc.Dial(peer.ConnectionString, grpc.WithInsecure())
 	if err != nil {
 		log.Println("can't connect to", peer.ConnectionString)
+		log.Println(err)
 		return nil
 	}
 	defer conn.Close()
@@ -64,12 +66,12 @@ func (t *GRPCTransporter) SendVoteRequest(server Server, peer *Peer, req *Reques
 		log.Println("error when call RequestVote", err)
 		return nil
 	}
-	fmt.Println("RequestVote resp:", resp)
+	// fmt.Println("RequestVote resp:", resp)
 	return newRequestVoteResponse(resp.Term, resp.VoteGranted)
 }
 
 func (t *GRPCTransporter) SendSnapshotRequest(server Server, peer *Peer, req *SnapshotRequest) *SnapshotResponse {
-	conn, err := grpc.Dial(peer.ConnectionString)
+	conn, err := grpc.Dial(peer.ConnectionString, grpc.WithInsecure())
 	if err != nil {
 		log.Println("can't connect to", peer.ConnectionString)
 		return nil
@@ -85,12 +87,12 @@ func (t *GRPCTransporter) SendSnapshotRequest(server Server, peer *Peer, req *Sn
 		log.Println("error when call Snapshot", err)
 		return nil
 	}
-	fmt.Println("Snapshot resp:", resp)
+	// fmt.Println("Snapshot resp:", resp)
 	return newSnapshotResponse(resp.Success)
 }
 
 func (t *GRPCTransporter) SendSnapshotRecoveryRequest(server Server, peer *Peer, req *SnapshotRecoveryRequest) *SnapshotRecoveryResponse {
-	conn, err := grpc.Dial(peer.ConnectionString)
+	conn, err := grpc.Dial(peer.ConnectionString, grpc.WithInsecure())
 	if err != nil {
 		log.Println("can't connect to", peer.ConnectionString)
 		return nil
