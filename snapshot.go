@@ -4,12 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/crc32"
-	"io"
-	"io/ioutil"
 	"os"
-
-	"github.com/golang/protobuf/proto"
-	protobuf "raft/proto"
 )
 
 // Snapshot represents an in-memory representation of the current state of the system.
@@ -104,67 +99,6 @@ func newSnapshotRecoveryRequest(leaderName string, snapshot *Snapshot) *Snapshot
 	}
 }
 
-// Encodes the SnapshotRecoveryRequest to a buffer. Returns the number of bytes
-// written and any error that may have occurred.
-func (req *SnapshotRecoveryRequest) Encode(w io.Writer) (int, error) {
-
-	protoPeers := make([]*protobuf.SnapshotRecoveryRequest_Peer, len(req.Peers))
-
-	for i, peer := range req.Peers {
-		protoPeers[i] = &protobuf.SnapshotRecoveryRequest_Peer{
-			Name:             *proto.String(peer.Name),
-			ConnectionString: *proto.String(peer.ConnectionString),
-		}
-	}
-
-	pb := &protobuf.SnapshotRecoveryRequest{
-		LeaderName: *proto.String(req.LeaderName),
-		LastIndex:  *proto.Uint64(req.LastIndex),
-		LastTerm:   *proto.Uint64(req.LastTerm),
-		Peers:      protoPeers,
-		State:      req.State,
-	}
-	p, err := proto.Marshal(pb)
-	if err != nil {
-		return -1, err
-	}
-
-	return w.Write(p)
-}
-
-// Decodes the SnapshotRecoveryRequest from a buffer. Returns the number of bytes read and
-// any error that occurs.
-func (req *SnapshotRecoveryRequest) Decode(r io.Reader) (int, error) {
-	data, err := ioutil.ReadAll(r)
-
-	if err != nil {
-		return 0, err
-	}
-
-	totalBytes := len(data)
-
-	pb := &protobuf.SnapshotRecoveryRequest{}
-	if err = proto.Unmarshal(data, pb); err != nil {
-		return -1, err
-	}
-
-	req.LeaderName = pb.LeaderName
-	req.LastIndex = pb.LastIndex
-	req.LastTerm = pb.LastTerm
-	req.State = pb.State
-
-	req.Peers = make([]*Peer, len(pb.Peers))
-
-	for i, peer := range pb.Peers {
-		req.Peers[i] = &Peer{
-			Name:             peer.Name,
-			ConnectionString: peer.ConnectionString,
-		}
-	}
-
-	return totalBytes, nil
-}
-
 // Creates a new Snapshot response.
 func newSnapshotRecoveryResponse(term uint64, success bool, commitIndex uint64) *SnapshotRecoveryResponse {
 	return &SnapshotRecoveryResponse{
@@ -172,44 +106,6 @@ func newSnapshotRecoveryResponse(term uint64, success bool, commitIndex uint64) 
 		Success:     success,
 		CommitIndex: commitIndex,
 	}
-}
-
-// Encode writes the response to a writer.
-// Returns the number of bytes written and any error that occurs.
-func (req *SnapshotRecoveryResponse) Encode(w io.Writer) (int, error) {
-	pb := &protobuf.SnapshotRecoveryResponse{
-		Term:        *proto.Uint64(req.Term),
-		Success:     *proto.Bool(req.Success),
-		CommitIndex: *proto.Uint64(req.CommitIndex),
-	}
-	p, err := proto.Marshal(pb)
-	if err != nil {
-		return -1, err
-	}
-
-	return w.Write(p)
-}
-
-// Decodes the SnapshotRecoveryResponse from a buffer.
-func (req *SnapshotRecoveryResponse) Decode(r io.Reader) (int, error) {
-	data, err := ioutil.ReadAll(r)
-
-	if err != nil {
-		return 0, err
-	}
-
-	totalBytes := len(data)
-
-	pb := &protobuf.SnapshotRecoveryResponse{}
-	if err := proto.Unmarshal(data, pb); err != nil {
-		return -1, err
-	}
-
-	req.Term = pb.Term
-	req.Success = pb.Success
-	req.CommitIndex = pb.CommitIndex
-
-	return totalBytes, nil
 }
 
 // Creates a new Snapshot request.
@@ -226,39 +122,4 @@ func newSnapshotResponse(success bool) *SnapshotResponse {
 	return &SnapshotResponse{
 		Success: success,
 	}
-}
-
-// Encodes the SnapshotResponse to a buffer. Returns the number of bytes
-// written and any error that may have occurred.
-func (resp *SnapshotResponse) Encode(w io.Writer) (int, error) {
-	pb := &protobuf.SnapshotResponse{
-		Success: *proto.Bool(resp.Success),
-	}
-	p, err := proto.Marshal(pb)
-	if err != nil {
-		return -1, err
-	}
-
-	return w.Write(p)
-}
-
-// Decodes the SnapshotResponse from a buffer. Returns the number of bytes read and
-// any error that occurs.
-func (resp *SnapshotResponse) Decode(r io.Reader) (int, error) {
-	data, err := ioutil.ReadAll(r)
-
-	if err != nil {
-		return 0, err
-	}
-
-	totalBytes := len(data)
-
-	pb := &protobuf.SnapshotResponse{}
-	if err := proto.Unmarshal(data, pb); err != nil {
-		return -1, err
-	}
-
-	resp.Success = pb.Success
-
-	return totalBytes, nil
 }

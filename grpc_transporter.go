@@ -42,7 +42,6 @@ func (t *GRPCTransporter) SendAppendEntriesRequest(server Server, peer *Peer, re
 		log.Println("error when call AppendEntries", err)
 		return nil
 	}
-	// fmt.Println("AppendEntries resp:", resp)
 	return newAppendEntriesResponse(resp.Term, resp.Success, resp.Index, resp.CommitIndex)
 }
 
@@ -99,11 +98,25 @@ func (t *GRPCTransporter) SendSnapshotRecoveryRequest(server Server, peer *Peer,
 	}
 	defer conn.Close()
 	client := protobuf.NewRaftClient(conn)
-	resp, err := client.RequestSnapshotRecovery(nc.Background(), &protobuf.SnapshotRecoveryRequest{
+
+	protoPeers := make([]*protobuf.SnapshotRecoveryRequest_Peer, len(req.Peers))
+
+	for i, peer := range req.Peers {
+		protoPeers[i] = &protobuf.SnapshotRecoveryRequest_Peer{
+			Name:             peer.Name,
+			ConnectionString: peer.ConnectionString,
+		}
+	}
+
+	pb := &protobuf.SnapshotRecoveryRequest{
 		LeaderName: req.LeaderName,
 		LastIndex:  req.LastIndex,
 		LastTerm:   req.LastTerm,
-	})
+		Peers:      protoPeers,
+		State:      req.State,
+	}
+
+	resp, err := client.RequestSnapshotRecovery(nc.Background(), pb)
 
 	if err != nil {
 		log.Println("error when call SnapshotRecovery", err)

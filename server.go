@@ -1312,32 +1312,43 @@ func (s *server) RequestSnapshotRecovery(c nc.Context, req *protobuf.SnapshotRec
 	}, nil
 }
 
-func (s *server) processSnapshotRecoveryRequest(req1 *protobuf.SnapshotRecoveryRequest) *SnapshotRecoveryResponse {
+func (s *server) processSnapshotRecoveryRequest(pbReq *protobuf.SnapshotRecoveryRequest) *SnapshotRecoveryResponse {
 
-	// req := newSnapshotRecoveryRequest(req1.LeaderName, req1.snapshot)
-	// // Recover state sent from request.
-	// if err := s.stateMachine.Recovery(req.State); err != nil {
-	// 	panic("cannot recover from previous state")
-	// }
+	req := &SnapshotRecoveryRequest{
+		LeaderName: pbReq.LeaderName,
+		LastIndex:  pbReq.LastIndex,
+		LastTerm:   pbReq.LastTerm,
+		// Peers:      pbReq.Peers,
+		State: pbReq.State,
+	}
 
-	// // Recover the cluster configuration.
-	// s.peers = make(map[string]*Peer)
-	// for _, peer := range req.Peers {
-	// 	s.AddPeer(peer.Name, peer.ConnectionString)
-	// }
+	// Recover state sent from request.
+	if err := s.stateMachine.Recovery(req.State); err != nil {
+		panic("cannot recover from previous state")
+	}
 
-	// // Update log state.
-	// s.currentTerm = req.LastTerm
-	// s.log.updateCommitIndex(req.LastIndex)
+	// Recover the cluster configuration.
+	req.Peers = make([]*Peer, len(pbReq.Peers))
 
-	// // Create local snapshot.
-	// s.pendingSnapshot = &Snapshot{req.LastIndex, req.LastTerm, req.Peers, req.State, s.SnapshotPath(req.LastIndex, req.LastTerm)}
-	// s.saveSnapshot()
+	for i, peer := range req.Peers {
+		req.Peers[i] = &Peer{
+			Name:             peer.Name,
+			ConnectionString: peer.ConnectionString,
+		}
+	}
 
-	// // Clear the previous log entries.
-	// s.log.compact(req.LastIndex, req.LastTerm)
+	// Update log state.
+	s.currentTerm = req.LastTerm
+	s.log.updateCommitIndex(req.LastIndex)
 
-	return newSnapshotRecoveryResponse(req1.LastTerm, true, req1.LastIndex)
+	// Create local snapshot.
+	s.pendingSnapshot = &Snapshot{req.LastIndex, req.LastTerm, req.Peers, req.State, s.SnapshotPath(req.LastIndex, req.LastTerm)}
+	s.saveSnapshot()
+
+	// Clear the previous log entries.
+	s.log.compact(req.LastIndex, req.LastTerm)
+
+	return newSnapshotRecoveryResponse(req.LastTerm, true, req.LastIndex)
 }
 
 // Load a snapshot at restart
